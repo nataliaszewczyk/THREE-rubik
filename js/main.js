@@ -23,12 +23,15 @@ var isRotating = false;
 var isGameStarted = false;
 var scene, camera, controls, raycaster, pivot, domEvent;
 var mousePosition = {x: 0, y: 0};
-var intersectedCube, clickedCube, allCubes = [], groupedCubes = [];
+//var mousePosition = new THREE.Vector3();
+var intersectedCube, clickedCube, clickedFace, allCubes = [], groupedCubes = [];
 var roundedCubeModel;
 var allMoves = [];
 
 var rubik;
 var gameSize = 3;
+
+let rotationAxis, rotationDirection;
 
 
 window.addEventListener("load", init, false);
@@ -100,12 +103,11 @@ function createScene() {
     renderer.setSize(windowWidth, windowHeight);
     renderer.shadowMap.enabled = true;
 
-    domEvent = new THREEx.DomEvents(camera, renderer.domElement)
+    domEvent = new THREEx.DomEvents(camera, renderer.domElement);
 
     container = document.querySelector("[js-scene]");
     container.appendChild(renderer.domElement);
 }
-
 
 
 function createLights() {
@@ -150,49 +152,95 @@ function createHelpers() {
 }
 
 
+// Works for the most part. TODO: finetune
 function createMove(endPoint) {
-    let group;
-// TODO: make sure this double check is not needed
-//    if(clickedCube && !isRotating) {
-        let direction = new THREE.Vector3();
+    let cubeEdge = (gameSize * CUBE_SIZE + (gameSize - 1) * GAP_SIZE) / 2;
+    let rubikFace;
+    let rotations = {
+        "x": {
+            "x": "y",
+            "y": "z",
+            "z": "y"
+        },
+        "y": {
+            "x": "z",
+            "z": "x"
+        },
+        "z": {
+            "x": "y",
+            "y": "x"
+        }
+    };
 
-        direction.set(endPoint.x, endPoint.y, 1);
-        direction.sub(clickedCube.position);
+    if(clickedCube && !isRotating) {
+        let centroid = clickedFace.centroid.clone();
+        let cubePosition = clickedCube.position.clone();
+        centroid.applyMatrix4(clickedCube.matrixWorld);
 
+        let direction = convertVectorTo3D(endPoint);
+        console.log(direction);
+        direction.sub(cubePosition);
         console.log(direction);
 
-        // TODO check for clicked face of the cube
-        let translations = {
-            x: "y",
-            y: "x",
-            z: "y"
-        };
+        let directionAxis = getDirectionAxis(direction);
+        console.log("Direction axis: " + directionAxis);
 
-        let axis = getDirectionAxis(direction);
+        for(let axis in centroid) {
+            if(isEqual(Math.abs(centroid[axis]), cubeEdge)) {
+               rubikFace = axis;
+            }
+        }
 
-        console.log(axis, direction[axis], endPoint[axis], clickedCube.position[axis]);
-        console.log(CUBE_SIZE - Math.abs(direction[axis]));
+        if(rubikFace && directionAxis) {
+            rotationAxis = rotations[rubikFace][directionAxis];
+        }
 
-        rotationAxis = translations[axis];
+        console.log("rubikFace: " + rubikFace + " | directionAxis: " + directionAxis + " | rotationAxis: " + rotationAxis);
 
-        if(direction[axis] > 0) {
+        if(!rotationAxis) {
+            console.log("No rotation axis");
+            return 0;
+        }
+
+        if(direction[directionAxis] > 0) {
             rotationDirection = 1;
         } else {
             rotationDirection = -1;
         }
 
-        if (axis == "y") {
+        if ((rubikFace == "z" && rotationAxis == "x") || (rubikFace == "x" && rotationAxis == "z") || (rubikFace == "y" && rotationAxis == "z")) {
+            rotationDirection *= -1;
+        }
+
+        if ((rubikFace == "x" && clickedCube.position.x > 0) || (rubikFace == "y" && clickedCube.position.y < 0) || (rubikFace == "z" && clickedCube.position.z < 0)) {
             rotationDirection *= -1;
         }
 
         pivot = createGroup(rotationAxis);
-        // TODO move this to Move object
-//    }
+        // TODO move this to Move object - create move and then create group based on the move
+    }
 
 }
 
 
+function convertVectorTo3D(vector) {
+    let vector3D = new THREE.Vector3(vector.x, vector.y, 0.5);
+    let result = new THREE.Vector3();
+
+    vector3D.unproject(camera);
+    vector3D.sub(camera.position).normalize();
+
+    let distance = -camera.position.z / vector3D.z;
+
+    result.copy(camera.position).add(vector3D.multiplyScalar(distance));
+
+    return result;
+}
+
+
 function createGroup(axis) {
+    console.log("Creating group for " + axis + " axis");
+
     pivot = new THREE.Object3D();
     pivot.rotation.set(0, 0, 0);
     pivot.updateMatrixWorld();
@@ -209,6 +257,7 @@ function createGroup(axis) {
     }
 
     isRotating = true;
+
     return pivot;
 }
 
@@ -217,14 +266,16 @@ function createGroup(axis) {
 // Game mechanics
 
 function checkIntersection() {
-    raycaster.setFromCamera( mousePosition, camera );
+    raycaster.setFromCamera(mousePosition, camera);
 
     var intersects = raycaster.intersectObjects(allCubes);
 
     // TODO: add highlight for row and column connected to the cube being hovered
     if ( intersects.length > 0 ) {
         if ( intersectedCube != intersects[ 0 ].object ) {
-            if ( intersectedCube ) intersectedCube.material.emissive.setHex(intersectedCube.currentHex);
+            if ( intersectedCube ) {
+                intersectedCube.material.emissive.setHex(intersectedCube.currentHex);
+            }
             intersectedCube = intersects[ 0 ].object;
             intersectedCube.currentHex = intersectedCube.material.emissive.getHex();
             intersectedCube.material.emissive.setHex( 0x333333 );
@@ -261,6 +312,14 @@ function moveComplete() {
     scene.remove(pivot);
     groupedCubes = [];
     isRotating = false;
+    checkIfSolved();
+}
+
+
+function checkIfSolved() {
+//    for() {
+        // todo: check allCubes array and if their faces are coloured properly
+//    }
 }
 
 
@@ -292,7 +351,7 @@ function mouseDownHandler(e, cube) {
 
 
 function mouseUpHandler(e) {
-    if(clickedCube) {
+    if(clickedCube && clickedFace) {
         let endPoint = {
             x: (e.clientX / windowWidth) * 2 - 1,
             y: - (e.clientY / windowHeight) * 2 + 1
@@ -308,6 +367,7 @@ function mouseUpHandler(e) {
 function cubeMouseDownHandler(e) {
     controls.enabled = false;
     clickedCube = e.target;
+    clickedFace = e.intersect.face;
 }
 
 
@@ -338,32 +398,20 @@ function getDirectionAxis(vector) {
 
 
 function computeFaceCentroids(geometry) {
-    var f, fl, face;
-
-    for (f = 0, fl = geometry.faces.length; f < fl; f ++) {
-        face = geometry.faces[f];
+    for (let f = 0; f < geometry.faces.length; f++) {
+        let face = geometry.faces[f];
         face.centroid = new THREE.Vector3(0, 0, 0);
+        face.centroid.add(geometry.vertices[face.a]);
+        face.centroid.add(geometry.vertices[face.b]);
+        face.centroid.add(geometry.vertices[face.c]);
 
         if (face instanceof THREE.Face3) {
-            face.centroid.add(geometry.vertices[face.a] );
-            face.centroid.add(geometry.vertices[face.b] );
-            face.centroid.add(geometry.vertices[face.c] );
             face.centroid.divideScalar(3);
         } else if ( face instanceof THREE.Face4 ) {
-            face.centroid.add(geometry.vertices[face.a] );
-            face.centroid.add(geometry.vertices[face.b] );
-            face.centroid.add(geometry.vertices[face.c] );
-            face.centroid.add(geometry.vertices[face.d] );
+            face.centroid.add(geometry.vertices[face.d]);
             face.centroid.divideScalar(4);
         }
-
     }
-}
-
-
-// TODO: move all vector normalization here or investigate if there's a function for that in THREE
-function normalize() {
-
 }
 
 
@@ -390,16 +438,10 @@ var Rubik = function(gameSize) {
                 cube.mesh.position.y = cubeOffset + j * CUBE_SIZE + j * GAP_SIZE + 0.5 * CUBE_SIZE;
                 cube.mesh.position.z = cubeOffset + k * CUBE_SIZE + k * GAP_SIZE + 0.5 * CUBE_SIZE;
 
-                cube.castShadow = true;
-                cube.receiveShadow = true;
-                cube.mesh.castShadow = true;
-                cube.mesh.receiveShadow = true;
-
-                allCubes.push(cube.mesh);
                 rubik.add(cube.mesh);
+                allCubes.push(cube.mesh);
 
-                domEvent.addEventListener(cube.mesh, 'mousedown', function(e){
-                    console.log(e);
+                domEvent.addEventListener(cube.mesh, 'mousedown', function(e) {
                     cubeMouseDownHandler(e);
                 }, true);
             }
@@ -430,7 +472,7 @@ var Cube = function(size) {
 
 
 var RoundedCube = function(size) {
-    let bufferGeometry = new RoundedBoxGeometry(size, size, size, 1, 2);
+    let bufferGeometry = new RoundedBoxGeometry(size, size, size, 1.25, 2);
     let color = colors[6];
     let geometry = new THREE.Geometry().fromBufferGeometry(bufferGeometry);
 
