@@ -58,6 +58,7 @@ function init() {
     }
 
     rubikGame = new Rubik(gameSize);
+    createSidesArray();
 
     loop();
 }
@@ -297,13 +298,19 @@ function createMoveBasic() {
         }
 
         pivot = createGroup(rotationAxis);
+
+        if(DEBUG) {
+            console.info(`Clicked face: ${rubikFace}, direction axis: ${directionAxis}, rotation axis: ${rotationAxis}, rotation direction: ${rotationDirection}`);
+        }
     }
 
 }
 
 
 function createGroup(axis) {
-    console.log("Creating group for " + axis + " axis");
+    if(DEBUG) {
+        console.log("Creating group for " + axis + " axis");
+    }
 
     pivot = new THREE.Object3D();
     pivot.rotation.set(0, 0, 0);
@@ -323,6 +330,54 @@ function createGroup(axis) {
     isRotating = true;
 
     return pivot;
+}
+
+
+// TODO: change to Rubik class prototype function (?)
+function createSidesArray() {
+
+    let cubes = rubikGame.cubes;
+    let sides = {
+        "x": {
+            "1": [],
+            "-1": []
+        },
+        "y": {
+            "1": [],
+            "-1": []
+        },
+        "z": {
+            "1": [],
+            "-1": []
+        }
+    };
+
+    for(let i = 0; i < cubes.length; i++) {
+        // check only every second face (there are two faces per cube side and they will always be the same colour)
+        for(let j = 0; j < 12; j += 2) {
+
+            let axis = getDirectionAxis(cubes[i].geometry.faces[j].centroid);
+
+            // ignore 0 because we don't want the middle row for given axis
+            if(cubes[i].position[axis] * cubes[i].geometry.faces[j].centroid[axis] > 0) {
+                let direction = 1;
+
+                if(cubes[i].geometry.faces[j].centroid[axis] < 0) {
+                   direction = -1;
+                }
+
+                sides[axis][direction].push(cubes[i].geometry.faces[j]);
+            }
+
+        }
+    }
+
+    rubikGame.sides = sides;
+
+    if(DEBUG) {
+        console.log("Sides of the cube:");
+        console.log(sides);
+    }
 }
 
 
@@ -370,7 +425,9 @@ function moveComplete() {
     for(let i = 0; i < groupedCubes.length; i++) {
         groupedCubes[i].updateMatrixWorld();
         groupedCubes[i].position.applyMatrix4(pivot.matrixWorld);
+
         THREE.SceneUtils.detach(groupedCubes[i], pivot, scene);
+        updateSides(groupedCubes[i]);
     }
 
     scene.remove(pivot);
@@ -380,8 +437,113 @@ function moveComplete() {
 }
 
 
+// TODO: recalculate face positions after rotation
+function updateSides(cube) {
+    let axis, centroid, direction, pop;
+    let cubeEdge = (gameSize * CUBE_SIZE + (gameSize - 1) * GAP_SIZE) / 2;
+
+    // For all cube's faces
+    for(let i = 0; i < 12; i += 2) {
+
+        // get face data
+        axis = getDirectionAxis(cube.geometry.faces[i].centroid);
+        direction;
+
+        if(cube.position[axis] * cube.geometry.faces[i].centroid[axis] > 0) {
+            direction = 1;
+        } else {
+            direction = -1;
+        }
+
+        // find this particular face in all saved faces
+        console.log(axis, direction, rubikGame.sides[axis][direction]);
+        pop = rubikGame.sides[axis][direction].pop();
+        console.log("pop");
+        console.log(pop);
+
+        // update centroid
+        centroid = cube.geometry.faces[i].centroid.clone();
+        centroid.applyMatrix4(cube.matrixWorld);
+
+        // Add new faces under appropriate axis and direction
+        console.log("Add new faces under appropriate axis and direction");
+        console.log(centroid);
+        axis = getDirectionAxis(centroid);
+        console.log(axis, Math.abs(centroid[axis]), cubeEdge, direction);
+        console.log(rubikGame.sides[axis][direction]);
+        rubikGame.sides[axis][direction] = cube.geometry.faces[i];
+        // TODO: account for rotation speed (values on rotation axis are not even)
+
+
+    }
+
+//
+//    for(let axis in centroid) {
+//        if(isEqual(Math.abs(centroid[axis]), cubeEdge)) {
+//           rubikFace = axis;
+//        }
+//    }
+//
+//
+//
+//
+//                rubikGame.sides[axis][direction][face].centroid.applyMatrix4(cube.matrixWorld);
+//
+//    for(let c in rubikGame.cubes) {
+//        if(cube.uuid == rubikGame.cubes[c].uuid) {
+//            cubeGlobal = rubikGame.cubes[c];
+////            computeFaceCentroids(cubeGlobal.geometry);
+//        }
+//    }
+//
+//    for(let i = 0; i < 12; i += 2) {
+//        let axis = getDirectionAxis(cube.geometry.faces[i].centroid);
+//        let direction;
+//        let face;
+//
+//        if(cube.position[axis] * cube.geometry.faces[i].centroid[axis] > 0) {
+//            direction = 1;
+//        } else {
+//            direction = -1;
+//        }
+//
+//        for(let face in rubikGame.sides[axis][direction]) {
+//            if(cube.geometry.faces[i].a == rubikGame.sides[axis][direction][face].a && cube.geometry.faces[i].b == rubikGame.sides[axis][direction][face].b && cube.geometry.faces[i].c == rubikGame.sides[axis][direction][face].c) {
+////                rubikGame.sides[axis][direction][face] = cubeGlobal.geometry.faces[i].clone();
+////                console.log(rubikGame.sides[axis][direction][face].centroid);
+//                rubikGame.sides[axis][direction][face].centroid.applyMatrix4(cube.matrixWorld);
+////                console.log(rubikGame.sides[axis][direction][face].centroid);
+//            }
+//        }
+//    }
+}
+
+
 function checkIfSolved() {
-    // todo: check Rubik.cubes array and if their faces are coloured properly
+    let check = [0];
+    let i = 0;
+
+    for(let axis in rubikGame.sides) {
+        for(let direction in rubikGame.sides[axis]) {
+            let color = rubikGame.sides[axis][direction][0].color.getHexString();
+            check[i] = 0;
+            for(let face in rubikGame.sides[axis][direction]) {
+                if(rubikGame.sides[axis][direction][face].color.getHexString() == color) {
+                    check[i]++;
+                }
+            }
+            i++;
+        }
+    }
+
+    for(let i in check) {
+        if(check[i] != gameSize * gameSize) {
+            return 0;
+        }
+    }
+
+    // TODO:
+    console.log("Congrats");
 }
 
 
@@ -426,15 +588,14 @@ function mouseUpHandler(e) {
 
 
 function cubeMouseDownHandler(e) {
-    console.log("cubeMouseDownHandler function");
     controls.enabled = false;
     startCube = e.target;
     clickedFace = e.intersect.face;
 }
 
 
+// TODO: test making a move when choocing two neighbouring cubes (no error/log)
 function cubeMouseUpHandler(e) {
-    console.log("cubeMouseUpHandler function");
     controls.enabled = true;
     endCube = e.target;
 }
@@ -487,8 +648,8 @@ function computeFaceCentroids(geometry) {
 function toScreenPosition(obj, camera) {
     var vector = new THREE.Vector3();
 
-    var widthHalf = 0.5*renderer.context.canvas.width;
-    var heightHalf = 0.5*renderer.context.canvas.height;
+    var widthHalf = 0.5 * renderer.context.canvas.width;
+    var heightHalf = 0.5 * renderer.context.canvas.height;
 
     obj.updateMatrixWorld();
     vector.setFromMatrixPosition(obj.matrixWorld);
@@ -550,12 +711,10 @@ var Rubik = function(gameSize) {
                 this.cubes.push(cube.mesh);
 
                 domEvent.addEventListener(cube.mesh, 'mousedown', function(e) {
-                    console.log("cubeMouseDownHandler");
                     cubeMouseDownHandler(e);
                 }, true);
 
                 domEvent.addEventListener(cube.mesh, 'mouseup', function(e) {
-                    console.log("cubeMouseUpHandler");
                     cubeMouseUpHandler(e);
                 }, true);
             }
@@ -571,7 +730,7 @@ var Cube = function(size) {
 
     computeFaceCentroids(geometry);
 
-    for (let i = 0; i < 12; i += 2) {
+    for (let i = 0; i < 2; i += 2) {
         let color = colors[i / 2];
         geometry.faces[i].color.setHex(color);
         geometry.faces[i + 1].color.setHex(color);
@@ -605,7 +764,7 @@ var RoundedCube = function(size) {
     let material = new THREE.MeshPhongMaterial({
         color: 0xffffff,
         flatShading: true,
-        vertexColors: 0xffffff
+        vertexColors: 0xdddddd
     });
 
     this.mesh = new THREE.Mesh( geometry, material);
