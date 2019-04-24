@@ -3,7 +3,7 @@ const ANGLE = Math.PI / 2;
 const CUBE_SIZE = 10;
 const GAP_SIZE = 0;
 const PRECISION = 0.001;
-var ROTATION_STEP = 0.2;
+var ROTATION_STEP = 0.15;
 var USE_BASIC_CONTROLS = true;
 var USE_ROUNDED_CUBES = true;
 
@@ -22,7 +22,9 @@ var windowWidth = window.innerWidth;
 var isRotating = false;
 var animationComplete = true;
 var isGameStarted = false;
+var isTimerStarted = false;
 var scene, camera, controls, raycaster, pivot, domEvent;
+var faceHelpers = [];
 var mousePosition = {x: 0, y: 0};
 //var mousePosition = new THREE.Vector3();
 var intersectedCube, clickedCube, clickedFace, allCubes = [], groupedCubes = [];
@@ -44,8 +46,11 @@ document.addEventListener('contextmenu', function (e) {
 }, false);
 window.addEventListener("resize", handleWindowResize, false);
 
+    window.addEventListener("load", init, false);
 if(DEBUG) {
     window.addEventListener("load", init, false);
+} else {
+    console.log = function() {}
 }
 
 
@@ -70,6 +75,13 @@ function init() {
 
 function loop() {
     controls.update();
+
+    if(DEBUG) {
+        for(i in faceHelpers) {
+            faceHelpers[i].update();
+        }
+    }
+
     checkIntersection();
 
     if(isRotating) {
@@ -91,6 +103,7 @@ function createScene() {
     let farPlane = 1000;
 
     scene = new THREE.Scene();
+//    scene.fog = new THREE.Fog(colors[6], 100, 300);
 
     camera = new THREE.PerspectiveCamera(
         fieldOfView,
@@ -257,6 +270,7 @@ function createMoveBasic() {
     };
 
     if(startCube && endCube && !isRotating) {
+        console.log(`Create move. Basic conditions: ${startCube} && ${endCube} && ${!isRotating}`);
         let centroid = clickedFace.centroid.clone();
         let direction = new THREE.Vector3();
         let start = new THREE.Vector3();
@@ -268,7 +282,8 @@ function createMoveBasic() {
 
         let directionAxis = getDirectionAxis(direction);
 
-        if(Math.abs(direction[directionAxis]) < CUBE_SIZE) {
+        if(Math.abs(direction[directionAxis]) < CUBE_SIZE / 2) {
+            console.log("Drag vector too small");
             return 0;
         }
 
@@ -303,18 +318,14 @@ function createMoveBasic() {
 
         pivot = createGroup(rotationAxis);
 
-        if(DEBUG) {
-            console.info(`Clicked face: ${rubikFace}, direction axis: ${directionAxis}, rotation axis: ${rotationAxis}, rotation direction: ${rotationDirection}`);
-        }
+        console.log(`Clicked face: ${rubikFace}, direction axis: ${directionAxis}, rotation axis: ${rotationAxis}, rotation direction: ${rotationDirection}`);
     }
 
 }
 
 
 function createGroup(axis) {
-    if(DEBUG) {
-        console.log("Creating group for " + axis + " axis");
-    }
+    console.log("Creating group for " + axis + " axis");
 
     pivot = new THREE.Object3D();
     pivot.rotation.set(0, 0, 0);
@@ -376,12 +387,14 @@ function rotateGroup() {
         animationComplete = true;
     }
 
-//    pivot.updateMatrixWorld();
+    pivot.updateMatrixWorld();
 }
 
 
 function moveComplete() {
 //    pivot.updateMatrixWorld();
+    moveCount++;
+    updateMoveCounter();
 
     for(let i = 0; i < groupedCubes.length; i++) {
         groupedCubes[i].updateMatrixWorld();
@@ -440,7 +453,7 @@ function updateCubeSides() {
                 }
 
                 // Add face to the sides array
-                sides[axis][direction].push(cubes[i].geometry.faces[j]);
+                sides[axis][direction].push(cubes[i].geometry.faces[j].clone());
 
                 // Color the neighbouring face to see what was picked
 //                cubes[i].geometry.faces[j+1].color.setHex(color);
@@ -484,6 +497,7 @@ function checkIfSolved() {
 
     // TODO:
     console.log("%cCongrats!", "font-size: x-large");
+    stopTimer();
 }
 
 
@@ -536,6 +550,10 @@ function cubeMouseDownHandler(e) {
     controls.enabled = false;
     startCube = e.target;
     clickedFace = e.intersect.face;
+
+    if(!isTimerStarted) {
+        startTimer();
+    }
 }
 
 
@@ -543,6 +561,7 @@ function cubeMouseDownHandler(e) {
 function cubeMouseUpHandler(e) {
     controls.enabled = true;
     endCube = e.target;
+    console.log(startCube.position, endCube.position);
 }
 
 
@@ -654,6 +673,12 @@ var Rubik = function(gameSize) {
 
                 rubik.add(cube.mesh);
                 this.cubes.push(cube.mesh);
+
+                if(DEBUG) {
+                    let helper = new THREE.FaceNormalsHelper( cube.mesh, 2, 0xffff00 );
+                    faceHelpers.push(helper);
+                    scene.add(helper);
+                }
 
                 domEvent.addEventListener(cube.mesh, 'mousedown', function(e) {
                     cubeMouseDownHandler(e);
