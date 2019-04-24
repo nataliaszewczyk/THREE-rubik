@@ -1,5 +1,7 @@
 body,
 html {
+    font-family: Helvetica, Trebuchet MS;
+    font-size: 100%;
     height: 0;
     margin: 0;
 }
@@ -11,4 +13,74 @@ html {
     overflow: hidden;
     position: absolute;
     width: 100%;
+    z-index: 2;
+}
+
+.start {
+    align-items: center;
+    background-color: #fdfdfd;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    justify-content: center;
+    opacity: 0;
+    position: absolute;
+    visibility: hidden;
+    width: 100%;
+    z-index: 1;
+}
+
+.start.visible {
+    opacity: 1;
+    visibility: visible;
+    z-index: 3;
+}
+
+.start__header {
+    font-size: 200%;
+    line-height: 1;
+    margin: 0 0 0 0;
+    padding: 0 0 1em 0;
+    text-transform: uppercase;
+}
+
+.start__button {
+    background: transparent;
+    border: 1px solid black;
+    border-radius: 1.5em;
+    box-shadow: none;
+    display: inline-block;
+    font-size: 90%;
+    margin: 1.5em 0 0 0;
+    padding: 1em 2em;
+    transition: background 0.3s;
+}
+
+.start__button:hover {
+    background: black;
+    border: 1px solid white;
+    color: white;
+}
+
+.form {
+    text-align: center;
+}
+
+.form__header {
+    font-weight: normal;
+    font-size: 125%;
+    margin: 0 0 0 0;
+    padding: 0 0 0.75em 0;
+}
+
+.form__input {
+    font-size: 125%;
+    height: 2.5em;
+    line-height: 1;
+    padding: 0 1em 0 1em;
+    width: 2em;
+}
+
+.transition {
+    transition: opacity 0.5s, visibility 0.5s;
 }

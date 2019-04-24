@@ -2,7 +2,7 @@
 <html class="no-js" lang="">
     <head>
         <meta charset="utf-8">
-        <title></title>
+        <title>Rubik's cube</title>
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -11,6 +11,18 @@
 
     <body>
         <div class="scene" js-scene></div>
+        <section class="start" js-menu>
+            <h1 class="start__header">Hi</h1>
+            <form class="start__form form">
+                <label>
+                    <h3 class="form__header">Choose game size</h3>
+                    <input class="form__input" type="number" min="2" max="6" value="3" js-input>
+                </label>
+            </form>
+            <button class="start__button" type="button" js-start>
+                Start the game
+            </button>
+        </section>
 
         <script src="js/three.min.js"></script>
         <script src="js/TrackballControls.js"></script>
@@ -18,6 +30,7 @@
         <script src="js/SceneUtils.js"></script>
         <script src="js/threex.domevents.js"></script>
         <script src="js/RoundedBoxGeometry.js"></script>
+        <script src="js/rubik.js"></script>
         <script src="js/main.js"></script>
     </body>
 </html>
