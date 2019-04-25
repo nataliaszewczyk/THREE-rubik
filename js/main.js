@@ -1,7 +1,7 @@
 var timer = document.querySelector("[js-timer]");
 var moveCounter = document.querySelector("[js-moves]");
 var timeStart, timerTimeout;
-var moveCount = 0;
+var moveCount;
 
 document.querySelector("[js-start]").addEventListener("click", startGame, false);
 document.querySelector("[js-input]").addEventListener("change", changeGameSize, false);
@@ -56,7 +56,7 @@ function stopTimer() {
 
 function updateTimer() {
     let timeNow = Date.now();
-    timer.innerText = ((timeNow- timeStart) / 1000).toFixed(2);
+    timer.innerText = ((timeNow - timeStart) / 1000).toFixed(2);
     timerTimeout = setTimeout(updateTimer, 100);
 }
 

@@ -23,7 +23,7 @@ var isRotating = false;
 var animationComplete = true;
 var isGameStarted = false;
 var isTimerStarted = false;
-var scene, camera, controls, raycaster, pivot, domEvent;
+var renderer, scene, camera, controls, raycaster, pivot, domEvent;
 var faceHelpers = [];
 var mousePosition = {x: 0, y: 0};
 //var mousePosition = new THREE.Vector3();
@@ -41,12 +41,11 @@ let container = document.querySelector("[js-scene]");
 window.addEventListener("mousemove", mouseMoveHandler, false);
 container.addEventListener("mousedown", mouseDownHandler, false);
 document.addEventListener("mouseup", mouseUpHandler, false);
-document.addEventListener('contextmenu', function (e) {
-    e.preventDefault();
-}, false);
 window.addEventListener("resize", handleWindowResize, false);
+//document.addEventListener('contextmenu', function (e) {
+//    e.preventDefault();
+//}, false);
 
-    window.addEventListener("load", init, false);
 if(DEBUG) {
     window.addEventListener("load", init, false);
 } else {
@@ -64,6 +63,7 @@ function init() {
         createHelpers();
     }
 
+    moveCount = 0;
     rubikGame = new Rubik(gameSize);
     updateCubeSides();
 
@@ -163,7 +163,6 @@ function createHelpers() {
     let origin = new THREE.Vector3(0, 0, 0);
     let dir = new THREE.Vector3(1, 1, 1);
     dir.normalize();
-
 
     let axisHelper = new THREE.AxesHelper(length);
     let arrowHelper = new THREE.ArrowHelper(dir, origin, length, 0xffffff);
@@ -510,12 +509,14 @@ function shuffleCube() {
 // Event functions
 
 function handleWindowResize() {
-    windowHeight = window.innerHeight;
-    windowWidth = window.innerWidth;
-    renderer.setSize(windowWidth, windowHeight);
-    camera.aspect = windowWidth / windowHeight;
-    camera.updateProjectionMatrix();
-    renderer.render(scene, camera);
+    if(renderer) {
+        windowHeight = window.innerHeight;
+        windowWidth = window.innerWidth;
+        renderer.setSize(windowWidth, windowHeight);
+        camera.aspect = windowWidth / windowHeight;
+        camera.updateProjectionMatrix();
+        renderer.render(scene, camera);
+    }
 }
 
 
