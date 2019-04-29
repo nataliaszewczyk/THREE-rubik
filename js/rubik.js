@@ -3,9 +3,10 @@ const ANGLE = Math.PI / 2;
 const CUBE_SIZE = 10;
 const GAP_SIZE = 0;
 const PRECISION = 0.001;
-var ROTATION_STEP = 0.15;
-var USE_BASIC_CONTROLS = true;
-var USE_ROUNDED_CUBES = true;
+const ROTATION_STEP = 0.15;
+const SHUFFLE_SIZE = 10;
+const USE_BASIC_CONTROLS = true;
+const USE_ROUNDED_CUBES = true;
 
 var colors = [
     0x00b894, // green
@@ -30,26 +31,27 @@ var mousePosition = {x: 0, y: 0};
 var intersectedCube, clickedCube, clickedFace, allCubes = [], groupedCubes = [];
 var startCube, endCube;
 var roundedCubeModel;
-var allMoves = [];
+var allMoves = [], shuffledMoves = [];
 
 var rubikGame;
 var gameSize = 3;
 
-let rotationAxis, rotationDirection;
+let rotationAxis, rotationDirection, directionAxis;
 let container = document.querySelector("[js-scene]");
 
 window.addEventListener("mousemove", mouseMoveHandler, false);
 container.addEventListener("mousedown", mouseDownHandler, false);
 document.addEventListener("mouseup", mouseUpHandler, false);
 window.addEventListener("resize", handleWindowResize, false);
-//document.addEventListener('contextmenu', function (e) {
-//    e.preventDefault();
-//}, false);
+
 
 if(DEBUG) {
     window.addEventListener("load", init, false);
 } else {
     console.log = function() {}
+    container.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+    }, false);
 }
 
 
@@ -65,9 +67,9 @@ function init() {
 
     moveCount = 0;
     rubikGame = new Rubik(gameSize);
-    updateCubeSides();
+    createCubeSides();
 
-    //shuffleCube();
+    shuffleCube();
 
     loop();
 }
@@ -86,6 +88,10 @@ function loop() {
 
     if(isRotating) {
         rotateGroup();
+    } else {
+        if(allMoves.length) {
+            pivot = createGroup(allMoves.pop());
+        }
     }
 
     renderer.render(scene, camera);
@@ -279,7 +285,7 @@ function createMoveBasic() {
         direction.add(endCube.position.clone());
         direction.sub(start);
 
-        let directionAxis = getDirectionAxis(direction);
+        directionAxis = getDirectionAxis(direction);
 
         if(Math.abs(direction[directionAxis]) < CUBE_SIZE / 2) {
             console.log("Drag vector too small");
@@ -315,7 +321,7 @@ function createMoveBasic() {
             rotationDirection *= -1;
         }
 
-        pivot = createGroup(rotationAxis);
+        allMoves.push(new Move(startCube, rubikFace, rotationAxis, rotationDirection, directionAxis));
 
         console.log(`Clicked face: ${rubikFace}, direction axis: ${directionAxis}, rotation axis: ${rotationAxis}, rotation direction: ${rotationDirection}`);
     }
@@ -323,7 +329,8 @@ function createMoveBasic() {
 }
 
 
-function createGroup(axis) {
+function createGroup(move) {
+    let axis = move.rotationAxis;
     console.log("Creating group for " + axis + " axis");
 
     pivot = new THREE.Object3D();
@@ -332,7 +339,7 @@ function createGroup(axis) {
     scene.add(pivot);
 
     for(let i = 0; i < rubikGame.cubes.length; i++) {
-        if(isEqual(rubikGame.cubes[i].position[axis], startCube.position[axis])) {
+        if(isEqual(rubikGame.cubes[i].position[axis], move.cube.position[axis])) {
             groupedCubes.push(rubikGame.cubes[i]);
         }
     }
@@ -347,6 +354,51 @@ function createGroup(axis) {
     return pivot;
 }
 
+
+function createCubeSides() {
+    let sides = {
+        "x": {
+            "1": [],
+            "-1": []
+        },
+        "y": {
+            "1": [],
+            "-1": []
+        },
+        "z": {
+            "1": [],
+            "-1": []
+        }
+    };
+
+    // For all the cubes
+    for(let i = 0; i < rubikGame.cubes.length; i++) {
+
+        for(let j = 0; j < 12; j += 2) {
+            // Get face centroid
+            let centroid = rubikGame.cubes[i].geometry.faces[j].centroid.clone();
+
+            // Get centroid axis with the maximum value
+            let axis = getDirectionAxis(centroid);
+
+            // Checks if the face is facing outside
+            if(rubikGame.cubes[i].position[axis] * centroid[axis] > 0) {
+                // Direction is the sign of the axis where the face is
+                let direction = 1;
+
+                if(centroid[axis] < 0) {
+                   direction = -1;
+                }
+
+                // Add face to the sides array
+                sides[axis][direction][rubikGame.cubes[i].uuid] = rubikGame.cubes[i].geometry.faces[j].clone();
+            }
+
+        }
+    }
+
+    rubikGame.sides = sides;
+}
 
 
 // Game mechanics
@@ -391,7 +443,7 @@ function rotateGroup() {
 
 
 function moveComplete() {
-//    pivot.updateMatrixWorld();
+    pivot.updateMatrixWorld();
     moveCount++;
     updateMoveCounter();
 
@@ -399,19 +451,32 @@ function moveComplete() {
         groupedCubes[i].updateMatrixWorld();
         groupedCubes[i].position.applyMatrix4(pivot.matrixWorld);
         THREE.SceneUtils.detach(groupedCubes[i], pivot, scene);
+//        scene.add(groupedCubes[i]);
+//        groupedCubes[i].updateMatrix();
     }
 
     scene.remove(pivot);
+    let move = {
+        "directionAxis": directionAxis,
+        "rotationAxis": rotationAxis,
+        "rotationDirection" : rotationDirection,
+        "clickedFace": getDirectionAxis(clickedFace.centroid),
+        "startCube": startCube
+    };
+    updateCubeSides(groupedCubes, move);
 
     groupedCubes = [];
     isRotating = false;
-    updateCubeSides();
 }
 
 
-function updateCubeSides() {
-    let cubes = rubikGame.cubes;
-    let sides = {
+function updateCubeSides(cubes, move) {
+    console.log("Sides:")
+    console.log(rubikGame.sides);
+    console.log("Grouped cubes, move:")
+    console.log(cubes, move);
+
+    let temp = {
         "x": {
             "1": [],
             "-1": []
@@ -426,82 +491,132 @@ function updateCubeSides() {
         }
     };
 
-    // For all the cubes
-    for(let i = 0; i < cubes.length; i++) {
-        let color = '0x'+Math.floor(Math.random()*16777215).toString(16);
-//        cubes[i].updateMatrix();
-//        computeFaceCentroids(cubes[i].geometry);
-//        cubes[i].geometry.computeFaceNormals();
-        console.log(cubes[i].geometry.faces.length)
-        for(let j = 0; j < 12; j += 2) {
-            // Get face centroid
-            let centroid = cubes[i].geometry.faces[j].centroid.clone();
-            // Update centroid values with cube transformation matrix
-//            centroid = centroid.applyMatrix4(cubes[i].matrixWorld);
+    let matchedFaces = 0;
+    let fronts = [move.directionAxis, move.clickedFace];
 
-            // Get centroid axis with the maximum value
-            let axis = getDirectionAxis(centroid);
+    for(let cube in cubes) {
+        for(let axis in fronts) {
+            for(let direction in rubikGame.sides[fronts[axis]]) {
+                for(let id in rubikGame.sides[fronts[axis]][direction]) {
 
-            // Checks if the face is facing outside
-            if(cubes[i].position[axis] * centroid[axis] > 0) {
-                // Direction is the sign of the axis where the face is
-                let direction = 1;
+                    if(cubes[cube]["uuid"] == id) {
+                        matchedFaces++;
+                        console.log("Matched face! Front: " + fronts[axis] + ", direction: " + direction);
 
-                if(centroid[axis] < 0) {
-                   direction = -1;
+                        let newAxis = move.clickedFace;
+
+                        if(fronts[axis] == newAxis) {
+                            newAxis = move.directionAxis;
+                        }
+
+                        let newDirection;
+
+                        if(axis == move.directionAxis) {
+                            if(direction) {
+                                newDirection = direction * move.rotationDirection;
+                            } else {
+                                newDirection = direction * -1;
+                            }
+                        } else {
+                            if(direction) {
+                                newDirection = direction * -1;
+                            } else {
+                                newDirection = move.rotationDirection;
+                            }
+                        }
+
+                        console.log("Face " + fronts[axis] + direction + " becomes " + newAxis + newDirection);
+                        temp[newAxis][newDirection][id] = rubikGame.sides[fronts[axis]][direction][id];
+                        delete rubikGame.sides[fronts[axis]][direction][id];
+                   }
                 }
-
-                // Add face to the sides array
-                sides[axis][direction].push(cubes[i].geometry.faces[j].clone());
-
-                // Color the neighbouring face to see what was picked
-//                cubes[i].geometry.faces[j+1].color.setHex(color);
             }
-
         }
     }
 
-    delete rubikGame.sides;
-    rubikGame.sides = sides;
-    console.log(sides);
+    for(let a in rubikGame.sides) {
+        for(let d in rubikGame.sides[a]) {
+            for(let i in rubikGame.sides[a][d]) {
+                temp[a][d][i] = rubikGame.sides[a][d][i];
+            }
+        }
+    }
+
+    console.log("Matched faces: " + matchedFaces);
+
+    rubikGame.sides = temp;
+    console.log("Sides after update:");
+    console.log(rubikGame.sides);
+
     // Check if the cube is solved
     checkIfSolved();
 }
 
 
 function checkIfSolved() {
+    console.log("Checking if solved!");
     let check = [0];
     let i = 0;
 
     for(let axis in rubikGame.sides) {
         for(let direction in rubikGame.sides[axis]) {
-            let color = rubikGame.sides[axis][direction][0].color.getHexString();
-            check[i] = 0;
+            let cl = {};
             for(let face in rubikGame.sides[axis][direction]) {
-                if(rubikGame.sides[axis][direction][face].color.getHexString() == color) {
-                    check[i]++;
+                let c = rubikGame.sides[axis][direction][face].color.getHexString();
+                if(!cl[c]) {
+                    cl[c] = 1;
+                } else {
+                    cl[c]++;
                 }
             }
-            i++;
-        }
-    }
-
-    console.log(check);
-
-    for(let i in check) {
-        if(check[i] != gameSize * gameSize) {
-            return 0;
+            console.log("Check for " + axis + direction);
+            console.log(cl);
+            if(Object.keys(cl).length != 1 || cl[Object.keys(cl)[0]] != gameSize * gameSize) {
+                return 0;
+            }
         }
     }
 
     // TODO:
-    console.log("%cCongrats!", "font-size: x-large");
+    console.info("%cCongrats!", "font-size: x-large");
     stopTimer();
 }
 
 
 function shuffleCube() {
+    let rotations = {
+        "x": {
+            "y": "z",
+            "z": "y"
+        },
+        "y": {
+            "x": "z",
+            "z": "x"
+        },
+        "z": {
+            "x": "y",
+            "y": "x"
+        }
+    };
+    let faces = ["x", "y", "z"];
 
+    for(let i = 0; i < SHUFFLE_SIZE; i++) {
+        let cube = rubikGame.cubes[Math.floor(Math.random() * (rubikGame.cubes.length - 1)) + 1];
+        let face = faces[Math.floor(Math.random() * faces.length)];
+        let rotationDirection = Math.random() > 0.5 ? 1 : 0;
+        let directionAxis = Object.keys(rotations[face])[rotationDirection];
+
+        if(!rotationDirection) {
+            rotationDirection = -1;
+        }
+
+        let rotationAxis = rotations[face][directionAxis];
+
+        shuffledMoves.push(new Move(cube, face, rotationAxis, rotationDirection, directionAxis));
+    }
+
+    console.log("Shuffled moves:");
+    console.log(shuffledMoves);
 }
 
 
@@ -558,17 +673,14 @@ function cubeMouseDownHandler(e) {
 }
 
 
-// TODO: test making a move when choocing two neighbouring cubes (no error/log)
 function cubeMouseUpHandler(e) {
     controls.enabled = true;
     endCube = e.target;
-    console.log(startCube.position, endCube.position);
 }
 
 
 
 // Helper functions
-
 function isEqual(a, b, precision) {
     precision = precision || PRECISION;
     return Math.abs(a - b) <= precision;
@@ -743,8 +855,12 @@ var RoundedCube = function(size) {
 
 
 // TODO: add properties for move
-var Move = function(cube, rotationAxis, rotationDirection) {
+var Move = function(cube, rubikFace, rotationAxis, rotationDirection, directionAxis) {
     this.cube = cube;
+    this.rubikFace = rubikFace;
     this.rotationAxis = rotationAxis;
     this.rotationDirection = rotationDirection;
+    if(directionAxis) {
+        this.directionAxis = directionAxis;
+    }
 }
