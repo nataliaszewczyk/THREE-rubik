@@ -1,11 +1,11 @@
-const DEBUG = true;
+const DEBUG = false;
 const ANGLE = Math.PI / 2;
 const CUBE_SIZE = 10;
 const GAP_SIZE = 0;
 const PRECISION = 0.001;
-const ROTATION_STEP = 0.2;
-const SHUFFLE_SIZE = 10;
-const USE_BASIC_CONTROLS = true;
+const ROTATION_STEP = 0.15;
+const SHUFFLE_SIZE = 5;
+const USE_KEYBOARD_CONTROLS = false;
 const USE_ROUNDED_CUBES = true;
 
 var colors = [
@@ -24,6 +24,7 @@ var isRotating = false;
 var animationComplete = true;
 var isGameStarted = false;
 var isTimerStarted = false;
+var isShuffled = false;
 var renderer, scene, camera, controls, raycaster, pivot, domEvent;
 var faceHelpers = [];
 var mousePosition = {x: 0, y: 0};
@@ -91,6 +92,9 @@ function loop() {
     } else {
         if(moveQueue.length && !currentMove) {
             currentMove = moveQueue.pop();
+            pivot = createGroup(currentMove);
+        } else if(!isShuffled) {
+            currentMove = shuffledMoves.pop();
             pivot = createGroup(currentMove);
         }
     }
@@ -178,7 +182,7 @@ function createHelpers() {
 }
 
 
-function createMove(x, y) {
+function createMoveKeyboard() {
     console.log(camera);
     let cubeEdge = (gameSize * CUBE_SIZE + (gameSize - 1) * GAP_SIZE) / 2;
     let rubikFace;
@@ -376,13 +380,14 @@ function createCubeSides() {
         }
     };
 
+    let rubikEdge = ((gameSize - 1) * CUBE_SIZE + (gameSize - 1) * GAP_SIZE) / 2;
+
     // For all the cubes
     for(let i = 0; i < rubikGame.cubes.length; i++) {
 
         for(let j = 0; j < 12; j += 2) {
             // Get face centroid
             let centroid = rubikGame.cubes[i].geometry.faces[j].centroid.clone();
-
             // Get centroid axis with the maximum value
             let axis = getDirectionAxis(centroid);
 
@@ -396,7 +401,9 @@ function createCubeSides() {
                 }
 
                 // Add face to the sides array
-                sides[axis][direction][rubikGame.cubes[i].uuid] = rubikGame.cubes[i].geometry.faces[j].clone();
+                if(isEqual(Math.abs(rubikGame.cubes[i].position[axis]), rubikEdge)) {
+                    sides[axis][direction][rubikGame.cubes[i].uuid] = rubikGame.cubes[i].geometry.faces[j].clone();
+               }
             }
 
         }
@@ -431,16 +438,16 @@ function checkIntersection() {
 
 
 function rotateGroup() {
-
     if(animationComplete) {
         moveComplete();
     }
 
-    pivot.rotation[rotationAxis] += (ROTATION_STEP * rotationDirection);
+    pivot.rotation[currentMove.rotationAxis] += (ROTATION_STEP * currentMove.rotationDirection);
 
-    if(Math.abs(pivot.rotation[rotationAxis])  >= ANGLE) {
-        pivot.rotation[rotationAxis] = ANGLE * rotationDirection;
+    if(Math.abs(pivot.rotation[currentMove.rotationAxis])  >= ANGLE) {
+        pivot.rotation[currentMove.rotationAxis] = ANGLE * currentMove.rotationDirection;
         animationComplete = true;
+        console.log("animationComplete: " + animationComplete);
     }
 
     pivot.updateMatrixWorld();
@@ -449,8 +456,6 @@ function rotateGroup() {
 
 function moveComplete() {
     pivot.updateMatrixWorld();
-    moveCount++;
-    updateMoveCounter();
 
     for(let i = 0; i < groupedCubes.length; i++) {
         groupedCubes[i].updateMatrixWorld();
@@ -465,6 +470,19 @@ function moveComplete() {
 
     groupedCubes = [];
     isRotating = false;
+
+    allMoves.push(currentMove);
+    currentMove = 0;
+
+    if(isShuffled) {
+        moveCount++;
+        updateMoveCounter();
+        checkIfSolved();
+    }
+
+    if(!shuffledMoves.length) {
+        isShuffled = true;
+    }
 }
 
 
@@ -518,7 +536,6 @@ function updateCubeSides(cubes, move) {
                            }
                         }
 
-//                        console.log("Face " + fronts[axis] + direction + " becomes " + newAxis + newDirection);
                         temp[newAxis][newDirection][id] = rubikGame.sides[fronts[axis]][direction][id];
                         delete rubikGame.sides[fronts[axis]][direction][id];
                    }
@@ -538,12 +555,6 @@ function updateCubeSides(cubes, move) {
     rubikGame.sides = temp;
     console.log("Sides after update:");
     console.log(rubikGame.sides);
-
-    allMoves.push(currentMove);
-    currentMove = 0;
-
-    // Check if the cube is solved
-    checkIfSolved();
 }
 
 
@@ -571,7 +582,7 @@ function checkIfSolved() {
     }
 
     // TODO:
-    console.info("%cCongrats!", "font-size: x-large");
+    alert("You dit it!");
     stopTimer();
 }
 
@@ -645,10 +656,10 @@ function mouseDownHandler(e, cube) {
 function mouseUpHandler(e) {
     if(startCube && clickedFace) {
         if(!isRotating && intersectedCube) {
-            if(USE_BASIC_CONTROLS) {
-                createMoveBasic();
+            if(USE_KEYBOARD_CONTROLS) {
+                createMoveKeyboard();
             } else {
-                createMove(e.clientX, e.clientY);
+                createMoveBasic();
             }
         }
     }
@@ -780,11 +791,15 @@ var Rubik = function(gameSize) {
                 rubik.add(cube.mesh);
                 this.cubes.push(cube.mesh);
 
+                // TODO fix cubes visibility when not using face normals helper
+                let s = 0;
                 if(DEBUG) {
-                    let helper = new THREE.FaceNormalsHelper( cube.mesh, 2, 0xffff00 );
-                    faceHelpers.push(helper);
-                    scene.add(helper);
+                    s = 2;
                 }
+
+                let helper = new THREE.FaceNormalsHelper( cube.mesh, s, 0xffff00 );
+                faceHelpers.push(helper);
+                scene.add(helper);
 
                 domEvent.addEventListener(cube.mesh, 'mousedown', function(e) {
                     cubeMouseDownHandler(e);
